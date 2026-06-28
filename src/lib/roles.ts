@@ -10,6 +10,7 @@ export const MODULES: { href: string; label: string }[] = [
   { href: '/gestion-datos',  label: '8 · Gestión de datos' },
   { href: '/reporte',        label: '9 · Reporte' },
   { href: '/verificacion',   label: 'Verificación' },
+  { href: '/cbam',           label: 'CBAM' },
   { href: '/configuracion',  label: 'Configuración' },
 ]
 

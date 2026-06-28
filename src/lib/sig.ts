@@ -17,6 +17,7 @@ export const CHAPTERS: Chapter[] = [
   { n: 8, slug: 'gestion-datos',  title: 'Gestión de datos',        desc: 'Evidencias, control de calidad, documentación y responsables', color: 'bg-indigo-100 text-indigo-800' },
   { n: 9, slug: 'reporte',        title: 'Reporte',                 desc: 'Consolidado, indicadores de intensidad e informe de huella', color: 'bg-amber-100 text-amber-800' },
   { n: 'V', slug: 'verificacion', title: 'Verificación',            desc: 'Verificaciones del inventario y no conformidades', color: 'bg-violet-100 text-violet-800' },
+  { n: '€', slug: 'cbam',         title: 'CBAM',                    desc: 'Emisiones incorporadas de bienes exportados a la UE (Reg. 2023/956)', color: 'bg-blue-100 text-blue-800' },
 ]
 export const CHAPTER_BY_SLUG: Record<string, Chapter> = Object.fromEntries(CHAPTERS.map(c => [c.slug, c]))
 
@@ -179,6 +180,64 @@ export const ACTION_STATUS: Record<string, { label: string; color: string }> = {
   en_curso:  { label: 'En curso',  color: 'bg-blue-100 text-blue-800' },
   cerrada:   { label: 'Cerrada',   color: 'bg-green-100 text-green-800' },
   cancelada: { label: 'Cancelada', color: 'bg-red-100 text-red-700' },
+}
+
+// =====================================================================
+// CBAM — Mecanismo de Ajuste en Frontera por Carbono (UE, Reg. 2023/956)
+// Mide EMISIONES INCORPORADAS POR PRODUCTO (no de la organización).
+// =====================================================================
+export const CBAM_SECTORS: Record<string, { label: string; color: string }> = {
+  cemento:       { label: 'Cemento',            color: 'bg-stone-100 text-stone-800' },
+  hierro_acero:  { label: 'Hierro y acero',     color: 'bg-slate-100 text-slate-800' },
+  aluminio:      { label: 'Aluminio',           color: 'bg-zinc-100 text-zinc-800' },
+  fertilizantes: { label: 'Fertilizantes',      color: 'bg-lime-100 text-lime-800' },
+  hidrogeno:     { label: 'Hidrógeno',          color: 'bg-cyan-100 text-cyan-800' },
+  electricidad:  { label: 'Electricidad',       color: 'bg-amber-100 text-amber-800' },
+}
+// Categorías de bienes agregadas sugeridas por sector (Anexo CBAM, orientativo).
+export const CBAM_AGG_CATEGORIES: Record<string, string[]> = {
+  cemento:       ['Arcillas calcinadas', 'Clinker de cemento', 'Cemento', 'Cementos aluminosos'],
+  hierro_acero:  ['Mineral sinterizado', 'Arrabio (pig iron)', 'Ferroaleaciones', 'Hierro de reducción directa (DRI)', 'Acero crudo', 'Productos de hierro o acero'],
+  aluminio:      ['Aluminio sin alear (unwrought)', 'Productos de aluminio'],
+  fertilizantes: ['Ácido nítrico', 'Amoníaco', 'Urea', 'Abonos mezclados'],
+  hidrogeno:     ['Hidrógeno'],
+  electricidad:  ['Electricidad'],
+}
+export const CBAM_METHOD: Record<string, string> = {
+  calculation:    'Basado en cálculo',
+  measurement:    'Basado en medición (CEMS)',
+  default_values: 'Valores por defecto',
+}
+export const CBAM_ELEC_SOURCE: Record<string, string> = {
+  grid_default:   'Red — factor por defecto',
+  actual:         'Real (factura / PPA)',
+  own_generation: 'Generación propia',
+}
+export const CBAM_VERIF: Record<string, { label: string; color: string }> = {
+  no_verificado: { label: 'No verificado', color: 'bg-amber-100 text-amber-800' },
+  verificado:    { label: 'Verificado',    color: 'bg-green-100 text-green-800' },
+}
+
+// Cálculo de emisiones incorporadas de un bien (t CO2e/t de producto).
+// SEE = (directas propias + Σ precursor.qty·SEE_dir) / producción  (idem indirectas).
+export type CbamPrecursor = { quantity?: number | null; see_direct?: number | null; see_indirect?: number | null }
+export function cbamEmbedded(
+  activityLevel: number | null | undefined,
+  directEmissions: number | null | undefined,
+  electricityMwh: number | null | undefined,
+  electricityEf: number | null | undefined,
+  precursors: CbamPrecursor[] = [],
+) {
+  const act = Number(activityLevel) || 0
+  const indirect = (Number(electricityMwh) || 0) * (Number(electricityEf) || 0)
+  const precDir = precursors.reduce((a, p) => a + (Number(p.quantity) || 0) * (Number(p.see_direct) || 0), 0)
+  const precInd = precursors.reduce((a, p) => a + (Number(p.quantity) || 0) * (Number(p.see_indirect) || 0), 0)
+  const totalDirect = (Number(directEmissions) || 0) + precDir
+  const totalIndirect = indirect + precInd
+  const seeDirect = act > 0 ? totalDirect / act : null
+  const seeIndirect = act > 0 ? totalIndirect / act : null
+  const seeTotal = seeDirect != null || seeIndirect != null ? (seeDirect ?? 0) + (seeIndirect ?? 0) : null
+  return { indirect, totalDirect, totalIndirect, seeDirect, seeIndirect, seeTotal }
 }
 
 // Formato de toneladas de CO2eq para la UI.

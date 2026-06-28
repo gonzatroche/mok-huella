@@ -2,7 +2,7 @@
 // mapeados a las cláusulas operativas de ISO 14064-1:2018.
 // Lo usan el sidebar (AppLayout) y las landings de cada módulo.
 import {
-  Building2, Calculator, TrendingDown, Database, BarChart3, ShieldCheck,
+  Building2, Calculator, TrendingDown, Database, BarChart3, ShieldCheck, Globe,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -57,6 +57,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/verificacion/verificaciones',   clause: '14064-3', label: 'Verificaciones',   desc: 'Auditorías del inventario y hallazgos' },
       { href: '/verificacion/no-conformidades', clause: '—',       label: 'No conformidades',  desc: 'NC, observaciones y acciones correctivas' },
+    ],
+  },
+  {
+    slug: 'cbam', n: '€', label: 'CBAM', href: '/cbam', icon: Globe,
+    items: [
+      { href: '/cbam/instalaciones', clause: 'CBAM', label: 'Instalaciones',          desc: 'Instalaciones productoras (operadores)' },
+      { href: '/cbam/bienes',        clause: 'CBAM', label: 'Bienes CBAM',            desc: 'Catálogo por código CN y categoría agregada' },
+      { href: '/cbam/declaraciones', clause: 'CBAM', label: 'Emisiones incorporadas', desc: 'Cálculo de emisiones incorporadas por bien y período' },
+      { href: '/cbam/reporte',       clause: 'CBAM', label: 'Reporte CBAM',           desc: 'Resumen por bien/CN para el communication template UE' },
     ],
   },
 ]
