@@ -71,3 +71,13 @@ export function friendlyError(
   }
   return 'Error: ' + (error.message ?? 'desconocido')
 }
+
+// Exporta filas (array de objetos clave→valor) a un archivo .xlsx real.
+// SheetJS se carga dinámicamente, solo cuando se invoca (no pesa en el bundle inicial).
+export async function exportToXlsx(rows: Record<string, any>[], sheetName: string, filename: string) {
+  const XLSX = await import('xlsx')
+  const ws = XLSX.utils.json_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31)) // Excel limita a 31 chars
+  XLSX.writeFile(wb, filename)
+}

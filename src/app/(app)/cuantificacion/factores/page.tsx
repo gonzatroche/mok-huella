@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, Pencil, Search, Gauge } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, Gauge, FileDown } from 'lucide-react'
 import { ISO_CATEGORIES, ISO_CATEGORY_KEYS, GHG_UNITS } from '@/lib/sig'
 import { Modal, Field, FormActions } from '@/components/ui/Form'
-import { friendlyError } from '@/lib/utils'
+import { friendlyError, exportToXlsx, localDateStr } from '@/lib/utils'
 
 type Factor = {
   id: string; name: string; descripcion: string | null; unit: string; factor: number
@@ -39,6 +39,20 @@ export default function FactoresPage() {
     return true
   })
 
+  function exportXlsx() {
+    const data = filtered.map(r => ({
+      'Nombre': r.name,
+      'Descripción': r.descripcion ?? '',
+      'Unidad': r.unit,
+      'Factor (kg CO2eq/unidad)': r.factor,
+      'Categoría ISO': r.category_key ? (ISO_CATEGORIES[r.category_key]?.label ?? r.category_key) : '',
+      'Fuente del factor': r.source_ref ?? '',
+      'Año vigencia': r.valid_year ?? '',
+      'Estado': r.activo ? 'Activo' : 'Inactivo',
+    }))
+    exportToXlsx(data, 'Factores', `factores_emision_${localDateStr()}.xlsx`)
+  }
+
   return (
     <>
       <div className="page-header">
@@ -46,7 +60,12 @@ export default function FactoresPage() {
           <p className="text-xs font-semibold text-gray-400">Cláusula 6.5 · Catálogo</p>
           <h1 className="page-title">Factores de emisión</h1>
         </div>
-        <button className="btn-primary" onClick={() => setEdit({ activo: true, unit: 'L' })}><Plus className="w-4 h-4" /> Nuevo</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={exportXlsx} disabled={filtered.length === 0} title="Exportar a Excel">
+            <FileDown className="w-4 h-4" /> Excel
+          </button>
+          <button className="btn-primary" onClick={() => setEdit({ activo: true, unit: 'L' })}><Plus className="w-4 h-4" /> Nuevo</button>
+        </div>
       </div>
       <p className="text-sm text-gray-500 mb-5 -mt-3">
         Factores de conversión (kg CO₂eq por unidad de actividad). Documentá siempre la fuente bibliográfica.
