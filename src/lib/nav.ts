@@ -39,7 +39,8 @@ export const NAV_GROUPS: NavGroup[] = [
     slug: 'gestion-datos', n: 8, label: '8 · Gestión de datos', href: '/gestion-datos', icon: Database,
     items: [
       { href: '/gestion-datos/evidencias',       clause: '8.x', label: 'Evidencias',         desc: 'Facturas, remitos y registros de respaldo' },
-      { href: '/gestion-datos/control-calidad',  clause: '8.x', label: 'Control de calidad',  desc: 'Verificación de datos e incertidumbre' },
+      { href: '/gestion-datos/control-calidad',  clause: '8.x', label: 'Control de calidad',  desc: 'Verificación de datos del inventario' },
+      { href: '/gestion-datos/incertidumbre',    clause: '8.x', label: 'Incertidumbre',       desc: 'Evaluación cualitativa o cuantitativa (ISO 14064-1)' },
       { href: '/gestion-datos/documentos',       clause: '8.x', label: 'Documentación',       desc: 'Procedimientos y documentos del sistema GEI' },
       { href: '/gestion-datos/responsables',     clause: '8.x', label: 'Responsables',        desc: 'Directorio de personas y responsables' },
     ],

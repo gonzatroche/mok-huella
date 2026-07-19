@@ -240,6 +240,47 @@ export function cbamEmbedded(
   return { indirect, totalDirect, totalIndirect, seeDirect, seeIndirect, seeTotal }
 }
 
+// =====================================================================
+// INCERTIDUMBRE (ISO 14064-1) — cuali / cuantitativa
+// =====================================================================
+export const UNCERTAINTY_APPROACH: Record<string, string> = {
+  cualitativa:  'Cualitativa',
+  cuantitativa: 'Cuantitativa (± %)',
+}
+// Nivel por dimensión: 1 = Baja incertidumbre, 2 = Media, 3 = Alta
+export const UNCERTAINTY_DIM_LEVEL: Record<number, string> = { 1: 'Baja', 2: 'Media', 3: 'Alta' }
+export const UNCERTAINTY_DIMS: { key: string; label: string }[] = [
+  { key: 'dim_representatividad', label: 'Representatividad del dato' },
+  { key: 'dim_temporal',         label: 'Correlación temporal' },
+  { key: 'dim_geografica',       label: 'Correlación geográfica' },
+  { key: 'dim_tecnologica',      label: 'Correlación tecnológica' },
+  { key: 'dim_completitud',      label: 'Completitud / integridad' },
+]
+export const UNCERTAINTY_LEVEL: Record<string, { label: string; color: string }> = {
+  baja:  { label: 'Baja',  color: 'bg-green-100 text-green-800' },
+  media: { label: 'Media', color: 'bg-amber-100 text-amber-800' },
+  alta:  { label: 'Alta',  color: 'bg-red-100 text-red-800' },
+}
+// Nivel global cualitativo = promedio de las dimensiones cargadas (1..3) → baja/media/alta.
+export function uncertaintyOverall(dims: (number | null | undefined)[]): string | null {
+  const vals = dims.map(d => Number(d)).filter(v => v >= 1 && v <= 3)
+  if (!vals.length) return null
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+  return avg <= 1.5 ? 'baja' : avg <= 2.25 ? 'media' : 'alta'
+}
+
+// =====================================================================
+// GASES DE EFECTO INVERNADERO y GWP (para FE desglosados por gas)
+// =====================================================================
+// GWP100 de referencia (IPCC AR5). Editable por factor.
+export const GAS_GWP: Record<string, number> = { CO2: 1, CH4: 28, N2O: 265, otro: 0 }
+export const GAS_OPTIONS = ['CO2', 'CH4', 'N2O', 'otro']
+// Factor CO2eq resultante = Σ (cantidad de gas × GWP).
+export type FactorGas = { amount?: number | null; gwp?: number | null }
+export function factorFromGases(gases: FactorGas[]): number {
+  return gases.reduce((a, g) => a + (Number(g.amount) || 0) * (Number(g.gwp) || 0), 0)
+}
+
 // Formato de toneladas de CO2eq para la UI.
 export function fmtT(n: number | null | undefined, decimals = 2): string {
   if (n == null || isNaN(n)) return '—'

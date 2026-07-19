@@ -28,3 +28,9 @@ yarn-error.log*
 # supabase local
 supabase/.branches
 supabase/.temp
+
+# graphify knowledge graph (generado)
+graphify-out/
+
+# fuente de feedback (no versionar)
+_chat*.txt
