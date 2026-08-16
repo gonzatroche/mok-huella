@@ -2,37 +2,61 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, Pencil, Search, Paperclip, Download } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, Paperclip, Download, Sparkles, Loader2 } from 'lucide-react'
 import { EVIDENCE_TIPO, label } from '@/lib/sig'
 import { Modal, Field, FormActions } from '@/components/ui/Form'
 import { friendlyError, formatDate } from '@/lib/utils'
+import { TIPO_FUENTE_TO_FACTOR, type ExtractionResult } from '@/lib/extraction'
 
 type Site = { id: string; name: string }
+type Factor = { id: string; name: string; unit: string; factor: number; category_key: string | null }
 type Evidence = {
   id: string; name: string; site_id: string | null; year: number | null; tipo: string | null
   file_url: string | null; file_path: string | null; file_name: string | null; uploaded_by: string | null
   notas: string | null; created_at: string
 }
+type Review = { evidence: Evidence; jobId: string; extraction: ExtractionResult }
 
 export default function EvidenciasPage() {
   const supabase = createClient()
   const [rows, setRows] = useState<Evidence[]>([])
   const [sites, setSites] = useState<Site[]>([])
+  const [factors, setFactors] = useState<Factor[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [fSite, setFSite] = useState('')
   const [edit, setEdit] = useState<Partial<Evidence> | null>(null)
+  const [extracting, setExtracting] = useState<string | null>(null)
+  const [review, setReview] = useState<Review | null>(null)
 
   async function load() {
     setLoading(true)
-    const [{ data }, { data: s }] = await Promise.all([
+    const [{ data }, { data: s }, { data: fac }] = await Promise.all([
       supabase.from('evidences').select('*').order('created_at', { ascending: false }),
       supabase.from('sites').select('id, name').order('name'),
+      supabase.from('emission_factors').select('id, name, unit, factor, category_key').eq('activo', true).order('name'),
     ])
-    setRows((data as any) ?? []); setSites((s as any) ?? [])
+    setRows((data as any) ?? []); setSites((s as any) ?? []); setFactors((fac as any) ?? [])
     setLoading(false)
   }
   useEffect(() => { load() }, [])
+
+  async function extract(r: Evidence) {
+    setExtracting(r.id)
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ evidence_id: r.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) { alert('No se pudo extraer: ' + (json.error ?? res.statusText)); return }
+      setReview({ evidence: r, jobId: json.job_id, extraction: json.extraction })
+    } catch (e: any) {
+      alert('Error al extraer: ' + (e?.message ?? e))
+    } finally {
+      setExtracting(null)
+    }
+  }
 
   async function del(r: Evidence) {
     if (!confirm(`¿Eliminar la evidencia "${r.name}"?`)) return
@@ -96,6 +120,11 @@ export default function EvidenciasPage() {
                   {r.notas && <p className="text-xs text-gray-500 mt-1">{r.notas}</p>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {(r.file_path || r.file_url) && (
+                    <button onClick={() => extract(r)} disabled={extracting === r.id} className="p-2 text-gray-400 hover:text-teal-600 disabled:opacity-50" title="Extraer datos con IA">
+                      {extracting === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    </button>
+                  )}
                   {(r.file_path || r.file_url) && <button onClick={() => download(r)} className="p-2 text-gray-400 hover:text-teal-600" title="Ver / descargar"><Download className="w-4 h-4" /></button>}
                   <button onClick={() => setEdit(r)} className="p-2 text-gray-400 hover:text-teal-600"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => del(r)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
@@ -106,7 +135,137 @@ export default function EvidenciasPage() {
         )}
 
       {edit && <Form row={edit} sites={sites} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load() }} />}
+      {review && <ExtractModal review={review} sites={sites} factors={factors} onClose={() => setReview(null)} onDone={() => { setReview(null); load() }} />}
     </>
+  )
+}
+
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+// Modal de revisión/confirmación de la extracción con IA.
+// Pre-llena cada item, auto-sugiere el factor (Fase 0) y, al confirmar, inserta
+// un emission_record por item + marca el job confirmado. Nunca inserta sin revisión.
+function ExtractModal({ review, sites, factors, onClose, onDone }: {
+  review: Review; sites: Site[]; factors: Factor[]; onClose: () => void; onDone: () => void
+}) {
+  const supabase = createClient()
+  const { evidence, jobId, extraction } = review
+
+  // Factor sugerido a partir del tipo_fuente detectado.
+  const suggestedFactorId = (() => {
+    const name = TIPO_FUENTE_TO_FACTOR[extraction.tipo_fuente]
+    return name ? (factors.find(f => f.name === name)?.id ?? '') : ''
+  })()
+
+  const y = extraction.fecha ? Number(extraction.fecha.slice(0, 4)) : new Date().getFullYear()
+  const mo = extraction.fecha ? Number(extraction.fecha.slice(5, 7)) : 0
+
+  const [proveedor, setProveedor] = useState(extraction.proveedor ?? '')
+  const [siteId, setSiteId] = useState(evidence.site_id ?? '')
+  const [year, setYear] = useState(String(y))
+  const [items, setItems] = useState(
+    (extraction.items ?? []).map(it => ({
+      concepto: it.concepto ?? '',
+      cantidad: it.cantidad != null ? String(it.cantidad) : '',
+      unidad: it.unidad ?? (suggestedFactorId ? factors.find(f => f.id === suggestedFactorId)?.unit ?? '' : ''),
+      factorId: suggestedFactorId,
+      include: true,
+    }))
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const setItem = (i: number, patch: Partial<(typeof items)[number]>) =>
+    setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)))
+
+  async function confirm() {
+    const chosen = items.filter(it => it.include && it.factorId && Number(it.cantidad) > 0)
+    if (!chosen.length) { setError('Marcá al menos un item con cantidad y factor.'); return }
+    setSaving(true); setError('')
+
+    const quarter = mo ? 'T' + Math.ceil(mo / 3) : null
+    const period = mo ? `${MESES[mo - 1]}-${year}` : null
+
+    const payloads = chosen.map(it => {
+      const f = factors.find(x => x.id === it.factorId)!
+      return {
+        year: Number(year), quarter, period,
+        site_id: siteId || null,
+        category_key: f.category_key,
+        source_text: proveedor || null,
+        activity_detail: it.concepto || null,
+        quantity: Number(it.cantidad),
+        unit: it.unidad || f.unit,
+        emission_factor: f.factor,
+        evidence_id: evidence.id,
+        extraction_job_id: jobId,
+      }
+    })
+
+    const ins = await supabase.from('emission_records').insert(payloads)
+    if (ins.error) { setError(friendlyError(ins.error)); setSaving(false); return }
+    await supabase.from('extraction_jobs').update({ status: 'confirmado' }).eq('id', jobId)
+    onDone()
+  }
+
+  async function discard() {
+    await supabase.from('extraction_jobs').update({ status: 'descartado' }).eq('id', jobId)
+    onDone()
+  }
+
+  return (
+    <Modal title="Revisar extracción" onClose={onClose}>
+      {error && <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-xl mb-3">{error}</div>}
+      {extraction.confianza != null && extraction.confianza < 0.6 && (
+        <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-xl mb-3">
+          Confianza baja ({Math.round((extraction.confianza ?? 0) * 100)}%). Revisá los datos con cuidado.
+        </div>
+      )}
+      {extraction.notas && <p className="text-xs text-gray-500 mb-3">Nota de la IA: {extraction.notas}</p>}
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2"><Field label="Proveedor"><input className="input" value={proveedor} onChange={e => setProveedor(e.target.value)} /></Field></div>
+        <Field label="Año"><input type="number" className="input" value={year} onChange={e => setYear(e.target.value)} /></Field>
+      </div>
+      <Field label="Sitio">
+        <select className="input" value={siteId} onChange={e => setSiteId(e.target.value)}>
+          <option value="">—</option>{sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </Field>
+
+      <p className="text-xs font-semibold text-gray-400 mt-3 mb-1">Consumos detectados</p>
+      <div className="space-y-2">
+        {items.map((it, i) => (
+          <div key={i} className="border border-gray-200 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" checked={it.include} onChange={e => setItem(i, { include: e.target.checked })} />
+              <input className="input flex-1" placeholder="Concepto" value={it.concepto} onChange={e => setItem(i, { concepto: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Cantidad"><input type="number" className="input" value={it.cantidad} onChange={e => setItem(i, { cantidad: e.target.value })} /></Field>
+              <Field label="Unidad"><input className="input" value={it.unidad} onChange={e => setItem(i, { unidad: e.target.value })} /></Field>
+              <Field label="Factor de emisión">
+                <select className="input" value={it.factorId} onChange={e => {
+                  const f = factors.find(x => x.id === e.target.value)
+                  setItem(i, { factorId: e.target.value, unidad: it.unidad || f?.unit || '' })
+                }}>
+                  <option value="">—</option>
+                  {factors.map(f => <option key={f.id} value={f.id}>{f.name} ({f.factor} kg/{f.unit})</option>)}
+                </select>
+              </Field>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 mt-4">
+        <button onClick={discard} disabled={saving} className="text-sm text-gray-500 hover:text-red-600">Descartar</button>
+        <div className="flex gap-2">
+          <button onClick={onClose} disabled={saving} className="btn-secondary">Cancelar</button>
+          <button onClick={confirm} disabled={saving} className="btn-primary">{saving ? 'Guardando…' : 'Confirmar y crear registros'}</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

@@ -924,3 +924,45 @@ select 'Gas natural', 'cat1', 'm3',
        (select id from emission_factors where name = 'Gas natural' limit 1),
        'Consumo de gas natural por red.'
 where not exists (select 1 from emission_sources where name = 'Gas natural');
+
+-- =====================================================================
+-- Fase 1 — Extracción de facturas con IA (idéntico a migrations/005_extraccion_ia.sql)
+--   extraction_jobs registra cada extracción de la IA sobre una evidencia
+--   (JSON crudo, modelo, tokens, estado) para trazabilidad ISO 14064-1.
+-- =====================================================================
+create table if not exists extraction_jobs (
+  id             uuid primary key default gen_random_uuid(),
+  evidence_id    uuid references evidences(id) on delete cascade,
+  status         text not null default 'pendiente',   -- pendiente | confirmado | descartado | error
+  model          text,
+  prompt_version text,
+  raw_output     jsonb,
+  supplier       text,
+  doc_date       date,
+  input_tokens   int,
+  output_tokens  int,
+  error          text,
+  created_by     text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists idx_extraction_jobs_evidence on extraction_jobs(evidence_id);
+
+drop trigger if exists trg_extraction_jobs_touch on extraction_jobs;
+create trigger trg_extraction_jobs_touch before update on extraction_jobs
+  for each row execute function sig_touch_updated_at();
+
+alter table emission_records
+  add column if not exists extraction_job_id uuid references extraction_jobs(id) on delete set null;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['extraction_jobs']
+  loop
+    execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists authenticated_all on %I;', t);
+    execute format('create policy authenticated_all on %I for all to authenticated using (true) with check (true);', t);
+    execute format('grant all on %I to anon, authenticated, service_role;', t);
+  end loop;
+end $$;

@@ -286,3 +286,17 @@ export function fmtT(n: number | null | undefined, decimals = 2): string {
   if (n == null || isNaN(n)) return '—'
   return n.toLocaleString('es', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
+
+// =====================================================================
+// TIPO DE FUENTE detectado por la extracción con IA (Fase 1)
+// =====================================================================
+export const TIPO_FUENTE: Record<string, string> = {
+  electricidad: 'Electricidad (red)',
+  gasoil:       'Gasoil (Diésel)',
+  nafta:        'Nafta (Gasolina)',
+  glp:          'Supergás (GLP)',
+  gas_natural:  'Gas natural',
+  fueloil:      'Fuel oil',
+  lena:         'Leña / Biomasa',
+  otro:         'Otro',
+}
